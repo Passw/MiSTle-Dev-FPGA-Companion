@@ -14,50 +14,50 @@
 #define hidp_extreme_debugf(...)
 #endif
 
-typedef struct {
-  uint8_t bSize: 2;
-  uint8_t bType: 2;
-  uint8_t bTag: 4;
+typedef struct
+{
+    uint8_t bSize : 2;
+    uint8_t bType : 2;
+    uint8_t bTag : 4;
 } __attribute__((packed)) item_t;
 
 // flags for joystick components required
-#define JOY_MOUSE_REQ_AXIS_X  0x01
-#define JOY_MOUSE_REQ_AXIS_Y  0x02
-#define JOY_MOUSE_REQ_BTN_0   0x04
-#define JOY_MOUSE_REQ_BTN_1   0x08
-#define JOYSTICK_COMPLETE     (JOY_MOUSE_REQ_AXIS_X | JOY_MOUSE_REQ_AXIS_Y | JOY_MOUSE_REQ_BTN_0)
-#define MOUSE_COMPLETE        (JOY_MOUSE_REQ_AXIS_X | JOY_MOUSE_REQ_AXIS_Y | JOY_MOUSE_REQ_BTN_0 | JOY_MOUSE_REQ_BTN_1)
+#define JOY_MOUSE_REQ_AXIS_X 0x01
+#define JOY_MOUSE_REQ_AXIS_Y 0x02
+#define JOY_MOUSE_REQ_BTN_0 0x04
+#define JOY_MOUSE_REQ_BTN_1 0x08
+#define JOYSTICK_COMPLETE (JOY_MOUSE_REQ_AXIS_X | JOY_MOUSE_REQ_AXIS_Y | JOY_MOUSE_REQ_BTN_0)
+#define MOUSE_COMPLETE (JOY_MOUSE_REQ_AXIS_X | JOY_MOUSE_REQ_AXIS_Y | JOY_MOUSE_REQ_BTN_0 | JOY_MOUSE_REQ_BTN_1)
 
-#define USAGE_PAGE_GENERIC_DESKTOP  1
-#define USAGE_PAGE_SIMULATION       2
-#define USAGE_PAGE_VR               3
-#define USAGE_PAGE_SPORT            4
-#define USAGE_PAGE_GAMING           5
-#define USAGE_PAGE_GENERIC_DEVICE   6
-#define USAGE_PAGE_KEYBOARD         7
-#define USAGE_PAGE_LEDS             8
-#define USAGE_PAGE_BUTTON           9
-#define USAGE_PAGE_ORDINAL         10
-#define USAGE_PAGE_TELEPHONY       11
-#define USAGE_PAGE_CONSUMER        12
+#define USAGE_PAGE_GENERIC_DESKTOP 1
+#define USAGE_PAGE_SIMULATION 2
+#define USAGE_PAGE_VR 3
+#define USAGE_PAGE_SPORT 4
+#define USAGE_PAGE_GAMING 5
+#define USAGE_PAGE_GENERIC_DEVICE 6
+#define USAGE_PAGE_KEYBOARD 7
+#define USAGE_PAGE_LEDS 8
+#define USAGE_PAGE_BUTTON 9
+#define USAGE_PAGE_ORDINAL 10
+#define USAGE_PAGE_TELEPHONY 11
+#define USAGE_PAGE_CONSUMER 12
 
-
-#define USAGE_POINTER   1
-#define USAGE_MOUSE     2
-#define USAGE_JOYSTICK  4
-#define USAGE_GAMEPAD   5
-#define USAGE_KEYBOARD  6
-#define USAGE_KEYPAD    7
+#define USAGE_POINTER 1
+#define USAGE_MOUSE 2
+#define USAGE_JOYSTICK 4
+#define USAGE_GAMEPAD 5
+#define USAGE_KEYBOARD 6
+#define USAGE_KEYPAD 7
 #define USAGE_MULTIAXIS 8
 
-#define USAGE_X       48
-#define USAGE_Y       49
-#define USAGE_Z       50
-#define USAGE_RX      51
-#define USAGE_RY      52
-#define USAGE_RZ      53
-#define USAGE_WHEEL   56
-#define USAGE_HAT     57
+#define USAGE_X 48
+#define USAGE_Y 49
+#define USAGE_Z 50
+#define USAGE_RX 51
+#define USAGE_RY 52
+#define USAGE_RZ 53
+#define USAGE_WHEEL 56
+#define USAGE_HAT 57
 
 // ---- helpers ----
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -94,17 +94,17 @@ typedef struct
 
 // ---------------- core ----------------
 
-static bool report_is_usable(uint16_t bit_count, uint8_t report_complete, hid_report_t *conf) {
-	hidp_debugf("  - total bit count: %d (%d bytes, %d bits)", 
-	      bit_count, (bit_count + 7)/8, bit_count%8);
+static bool report_is_usable(uint16_t bit_count, uint8_t report_complete, hid_report_t *conf)
+{
+    hidp_debugf("  - total bit count: %d (%d bytes, %d bits)",
+                bit_count, (bit_count + 7) / 8, bit_count % 8);
 
     // FIX: round report size up
-    conf->report_size = (bit_count + 7)/8;
+    conf->report_size = (bit_count + 7) / 8;
 
-	// check if something useful was detected
-	if( ((conf->type == REPORT_TYPE_JOYSTICK) && ((report_complete & JOYSTICK_COMPLETE) == JOYSTICK_COMPLETE)) ||
-	    ((conf->type == REPORT_TYPE_MOUSE)    && ((report_complete & MOUSE_COMPLETE) == MOUSE_COMPLETE)) ||
-	    (conf->type == REPORT_TYPE_KEYBOARD))
+    if (((conf->type == REPORT_TYPE_JOYSTICK) && ((report_complete & JOYSTICK_COMPLETE) == JOYSTICK_COMPLETE)) ||
+        ((conf->type == REPORT_TYPE_MOUSE) && ((report_complete & MOUSE_COMPLETE) == MOUSE_COMPLETE)) ||
+        (conf->type == REPORT_TYPE_KEYBOARD))
     {
         hidp_debugf("  - report %d is usable", conf->report_id);
 
@@ -149,14 +149,15 @@ static bool report_is_usable(uint16_t bit_count, uint8_t report_complete, hid_re
     return false;
 }
 
-bool parse_report_descriptor(const uint8_t *rep, uint16_t rep_size, hid_report_t *conf, uint16_t *rbytes) {
-	int8_t app_collection = 0;
-	int8_t phys_log_collection = 0;
-	uint8_t skip_collection = 0;
-	int8_t generic_desktop = -1;   // depth at which first gen_desk was found
-	uint8_t collection_depth = 0;
+bool parse_report_descriptor(const uint8_t *rep, uint16_t rep_size, hid_report_t *conf, uint16_t *rbytes)
+{
+    int8_t app_collection = 0;
+    int8_t phys_log_collection = 0;
+    uint8_t skip_collection = 0;
+    int8_t generic_desktop = -1;
+    uint8_t collection_depth = 0;
 
-	uint8_t i;
+    uint8_t i;
 
     uint8_t buttons = 0;
     uint8_t report_size = 0, report_count = 0;
@@ -174,14 +175,14 @@ bool parse_report_descriptor(const uint8_t *rep, uint16_t rep_size, hid_report_t
 
     uint8_t report_complete = 0;
 
-	// joystick/mouse components
-	int8_t axis[MAX_AXES];
-	uint8_t btns = 0;
-	int8_t hat = -1;
+    int8_t axis[MAX_AXES];
+    uint8_t btns = 0;
+    int8_t hat = -1;
 
-	for (i=0; i<MAX_AXES; i++) axis[i] = -1;
+    for (i = 0; i < MAX_AXES; i++)
+        axis[i] = -1;
 
-	conf->type = REPORT_TYPE_NONE;
+    conf->type = REPORT_TYPE_NONE;
 
     uint16_t usage_list[HID_LOCAL_USAGE_MAX];
     uint8_t usage_list_len = 0;
