@@ -20,7 +20,6 @@
 #include "../mcu_hw.h"
 
 #include "bl616_glb.h"
-
 #include "bflb_mtimer.h"
 #include "bflb_spi.h"
 #include "bflb_dma.h"
@@ -35,14 +34,7 @@
 #include "lwip/pbuf.h"
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
-#if __has_include("bl_fw_api.h")
-#include "bl_fw_api.h"        // old SDK 2.0, buggy and WIFI not working
-#else
-#include "export/bl_fw_api.h" // SDK 2.0.1 WIFI working fine
-#undef __INLINE
-#undef __PACKED
-#include <fhost.h>
-#endif
+#include "bl_fw_api.h"
 #include "wifi_mgmr_ext.h"
 #include "wifi_mgmr.h"
 #include "rfparam_adapter.h"
@@ -1438,10 +1430,11 @@ bool mcu_hw_tcp_data(unsigned char byte) {
   return false;  // data has not been processed (we are not connected)
 }
 
-void mcu_hw_main_loop(void) {
-  /* Start the tasks and timer running. */  
+void mcu_hw_main_loop(void)
+{
+  /* Start the tasks and timer running. */
   vTaskStartScheduler();
-  
+
   /* If all is well, the scheduler will now be running, and the following
      line will never be reached.  If the following line does execute, then
      there was insufficient FreeRTOS heap memory available for the Idle and/or
@@ -1449,7 +1442,90 @@ void mcu_hw_main_loop(void) {
      FreeRTOS web site for more details on the FreeRTOS heap
      http://www.freertos.org/a00111.html. */
 
-  for( ;; );
+  for (;;)
+    ;
+}
+
+void usbh_hid_run(struct usbh_hid *hid_class)
+{
+
+  struct usb_config *usb = &usb_config;
+  uint8_t i = hid_class->minor;
+
+  const char *driver_name = hid_class->hport->config.intf[hid_class->intf].class_driver->driver_name;
+
+  debugf("New Path - connected - Driver name: %s intf: %d minor: %u rep_size: %u", hid_class->hport->config.intf[hid_class->intf].class_driver->driver_name, i, hid_class->minor, hid_class->report_size);
+
+  if (driver_name && strcmp(driver_name, "hid") == 0)
+  {
+    usb->hid_info[i].class = hid_class;
+
+    usb_debugf("NEW HID %d", i);
+
+    usb_debugf("Interval: %d", usb->hid_info[i].class->hport->config.intf[hid_class->intf].altsetting[0].ep[0].ep_desc.bInterval);
+
+    usb_debugf("Interface %d", usb->hid_info[i].class->intf);
+    usb_debugf("  class %d", usb->hid_info[i].class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceClass);
+    usb_debugf("  subclass %d", usb->hid_info[i].class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceSubClass);
+    usb_debugf("  protocol %d", usb->hid_info[i].class->hport->config.intf[hid_class->intf].altsetting[0].intf_desc.bInterfaceProtocol);
+
+    uint8_t ifnt = usb->hid_info[i].class->intf;
+    usb_debugf("HID[%d]: class=%p if=%u intin=%02x ep-addr=%02x",
+               i,
+               usb->hid_info[i].class,
+               ifnt,
+               usb->hid_info[i].class->intin ? usb->hid_info[i].class->intin->bEndpointAddress : 0,
+               usb->hid_info[i].class->hport->config.intf[ifnt].altsetting[0].ep[0].ep_desc.bEndpointAddress);
+
+    memset(&usb->hid_info[i].report, 0, sizeof(usb->hid_info[i].report));
+    // int n = usbh_hid_get_report_descriptor(hid_class, report_desc[i], 1024);
+    uint16_t rep_desc = usbh_hid_get_report_descriptor(hid_class, report_desc[i], 1024);
+    if (rep_desc < 0)
+    {
+      usb_debugf("usbh_hid_get_report_descriptor issue");
+      usb->hid_info[i].state = STATE_FAILED;
+      return;
+    }
+
+    uint16_t vendor_id = usb->hid_info[i].class->hport->device_desc.idVendor;
+    uint16_t product_id = usb->hid_info[i].class->hport->device_desc.idProduct;
+    // parse report descriptor ...
+    usb_debugf("report descriptor: %p", report_desc[i]);
+    dump_report_descriptor(report_desc[i], rep_desc);
+    if (!parse_report_descriptor(report_desc[i], (uint16_t)rep_desc, &usb->hid_info[i].report, NULL))
+    {
+      usb->hid_info[i].state = STATE_FAILED; // parsing failed, don't use
+      return;
+    }
+
+    uint8_t ifn = usb->hid_info[i].class->intf;
+    const struct usb_interface_descriptor *id =
+        &usb->hid_info[i].class->hport->config.intf[ifn].altsetting[0].intf_desc;
+
+    usb->hid_info[i].stop = 0;
+    usb->hid_info[i].state = STATE_DETECTED;
+  }
+
+  // start a new thread for the new device
+  xTaskCreate(usbh_hid_client_thread, (char *)"hid_task", 1024,
+              &usb->hid_info[i], configMAX_PRIORITIES - 3, &usb->hid_info[i].task_handle);
+
+  debugf("New Path - exiting startup procedure");
+
+}
+
+void usbh_hid_stop(struct usbh_hid *hid_class)
+{
+  uint8_t i = hid_class->minor;
+  debugf("New Path - removed - Driver name: %s intf: %d rep_size: %u", hid_class->hport->config.intf[hid_class->intf].class_driver->driver_name, i, hid_class->report_size);
+  usb_config.hid_info[i].stop = 1;
+
+  if (usb_config.hid_info[i].hid_state.joystick.js_index != NO_JOYSTICK)
+  {
+    hid_release_joystick(usb_config.hid_info[i].hid_state.joystick.js_index);
+    usb_config.hid_info[i].hid_state.joystick.js_index = NO_JOYSTICK;
+  }
+
 }
 
 SHELL_CMD_EXPORT_ALIAS(lsusb, lsusb, ls usb);
